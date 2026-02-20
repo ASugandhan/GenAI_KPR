@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import ZeroTrustLogo from '@/components/ZeroTrustLogo';
 
 export const metadata: Metadata = {
     title: 'ZeroTrust AI — Multi-Agent Firewall',
@@ -14,9 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <header className="sticky top-0 z-50 border-b border-cyber-border bg-cyber-bg/80 backdrop-blur-xl">
                     <div className="max-w-[1800px] mx-auto px-6 py-3 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white font-bold text-sm">
-                                ZT
-                            </div>
+                            <ZeroTrustLogo size={100}/>
                             <div>
                                 <h1 className="text-lg font-semibold text-white glow-text">ZeroTrust AI</h1>
                                 <p className="text-[10px] text-gray-500 tracking-widest uppercase">Multi-Agent Firewall</p>

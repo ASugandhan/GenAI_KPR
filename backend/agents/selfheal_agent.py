@@ -57,6 +57,7 @@ class SelfHealAgent(BaseAgent):
                 "health_score_after": health.health_score,
                 "health_score_delta": 0.0,
                 "permanent_rules": [],
+                "recommendations": [],
                 "hardening_recommendations": [],
                 "lessons_learned": "No recent critical incidents detected.",
             }
@@ -124,6 +125,7 @@ class SelfHealAgent(BaseAgent):
             "health_score_after": health.health_score,
             "health_score_delta": delta,
             "permanent_rules": llm_result.get("permanent_rules", []),
+            "recommendations": llm_result.get("hardening_recommendations", []),
             "hardening_recommendations": llm_result.get("hardening_recommendations", []),
             "lessons_learned": llm_result.get("lessons_learned", ""),
         }
@@ -131,6 +133,7 @@ class SelfHealAgent(BaseAgent):
         self.log("selfheal_complete", {
             "healed": len(recent_events),
             "health_delta": delta,
+            "target_incident": data.get("incident_id") if data else "all"
         })
 
         return result

@@ -5,9 +5,9 @@ Generates proportional response rules based on threat severity and trust score.
 import uuid
 from datetime import datetime
 from agents.base_agent import BaseAgent
-from core.trust_engine import get_or_create_device, apply_penalty, get_recommended_action
+from core.trust_engine import get_or_create_device, apply_penalty, get_recommended_action, SEVERITY_PENALTY
 from core.rule_engine import create_rule
-from core.models import Event
+from core.models import Event, SystemHealth
 from config import PROTECTED_IPS
 
 
@@ -16,6 +16,16 @@ class TacticianAgent(BaseAgent):
 
     def __init__(self):
         super().__init__("tactician")
+
+    def _get_or_init_health(self, db) -> SystemHealth:
+        """Get or initialize the system health record."""
+        health = db.query(SystemHealth).filter(SystemHealth.id == 1).first()
+        if not health:
+            health = SystemHealth(id=1, health_score=100.0, total_healed=0, last_updated=datetime.utcnow())
+            db.add(health)
+            db.commit()
+            db.refresh(health)
+        return health
 
     async def process(self, verdict: dict, db=None, packet: dict = None) -> dict:
         """
@@ -44,6 +54,13 @@ class TacticianAgent(BaseAgent):
         # Step 1: Apply trust penalty
         device = apply_penalty(db, src_ip, severity)
         trust_score = device.trust_score
+
+        # Step 1.5: Apply system health penalty
+        health = self._get_or_init_health(db)
+        penalty = SEVERITY_PENALTY.get(severity, 3)
+        health.health_score = max(0.0, health.health_score - (penalty / 2.0)) # Global health drops less than individual trust
+        health.last_updated = datetime.utcnow()
+        db.commit()
 
         # Step 2: Determine action
         action = get_recommended_action(trust_score)

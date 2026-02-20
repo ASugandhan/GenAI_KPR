@@ -157,6 +157,7 @@ class AnalystAgent(BaseAgent):
                 "mitre_mappings": [],
                 "predicted_next": "System quiet — no threats detected.",
                 "event_count": 0,
+                "threat_count": 0,
             }
 
         # Correlate events
@@ -202,6 +203,7 @@ class AnalystAgent(BaseAgent):
             "mitre_mappings": mitre_mappings,
             "predicted_next": prediction,
             "event_count": len(events),
+            "threat_count": sum(attack_counts.values()),
             "llm_insight": llm_insight,
         }
 

@@ -5,7 +5,29 @@ Used for ML training and real-time demo streaming.
 """
 import random
 import time
+import os
 from datetime import datetime
+
+PACKET_SOURCE = os.getenv("PACKET_SOURCE", "simulator")
+
+if PACKET_SOURCE == "live":
+    from scapy.all import sniff, IP, TCP, UDP
+
+    def capture_live(interface="eth0", callback=None):
+        def process(pkt):
+            if IP in pkt:
+                data = {
+                    "src_ip": pkt[IP].src,
+                    "dst_ip": pkt[IP].dst,
+                    "port": pkt[TCP].dport if TCP in pkt else (pkt[UDP].dport if UDP in pkt else 0),
+                    "protocol": "TCP" if TCP in pkt else "UDP",
+                    "bytes": len(pkt),
+                    "duration": 0.1,
+                    "packet_count": 1
+                }
+                if callback:
+                    callback(data)
+        sniff(iface=interface, prn=process, store=False)
 
 
 ATTACK_TYPES = ["normal", "brute_force", "port_scan", "ddos", "exploit", "c2_beacon"]
