@@ -1,0 +1,34 @@
+# ================================
+# ZeroTrust AI — Python Requirements
+# Backend: FastAPI + ML + Agents
+# ================================
+
+# --- Web Framework ---
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-dotenv==1.0.1
+pydantic==2.7.1
+
+# --- ML & Data ---
+scikit-learn==1.4.2
+xgboost==2.0.3
+pandas==2.2.2
+numpy==1.26.4
+joblib==1.4.2
+
+# --- Database (MySQL) ---
+sqlalchemy==2.0.30
+pymysql==1.1.1
+cryptography==42.0.8
+
+# --- LLM (Gemini - Free) ---
+google-generativeai==0.7.2
+
+# --- Async & Streaming ---
+sse-starlette==2.1.0
+httpx==0.27.0
+
+# --- Utilities ---
+uuid==1.30
+python-dateutil==2.9.0
+faker==24.9.0
