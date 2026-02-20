@@ -5,7 +5,7 @@ import axios from 'axios';
 import { Packet, ThreatVerdict, FirewallRule, DeviceTrust, AnalystReport, SelfHealResult, EventLog } from './types';
 
 const API = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080',
+    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
     timeout: 10000,
 });
 
