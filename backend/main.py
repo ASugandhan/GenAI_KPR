@@ -5,6 +5,12 @@ Entry point: mounts all routers, CORS, startup/shutdown events.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from core.database import init_db
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
+
 
 # Import routers
 from api.traffic import router as traffic_router
@@ -14,6 +20,8 @@ from api.trust import router as trust_router
 from api.summarize import router as summarize_router
 from api.selfheal import router as selfheal_router
 from api.logs import router as logs_router
+from api.auth import router as auth_router
+
 
 
 app = FastAPI(
@@ -31,6 +39,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
 # Mount all routers
 app.include_router(traffic_router)
 app.include_router(detect_router)
@@ -39,6 +51,8 @@ app.include_router(trust_router)
 app.include_router(summarize_router)
 app.include_router(selfheal_router)
 app.include_router(logs_router)
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+
 
 
 @app.on_event("startup")

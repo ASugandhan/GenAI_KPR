@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSSE } from '@/lib/useSSE';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 const PROTOCOLS = ['TCP', 'UDP', 'HTTP', 'HTTPS', 'DNS', 'SSH', 'ICMP'];
 const HOURS = ['00', '04', '08', '12', '16', '20'];
@@ -14,10 +14,16 @@ export default function TrafficHeatmap() {
 
     useEffect(() => {
         const counts: Record<string, number> = {};
+        const currentHour = new Date().getHours();
+
+        // Find the closest hour bucket (00, 04, 08, 12, 16, 20)
+        const bucket = HOURS.reduce((prev, curr) => {
+            return (Math.abs(parseInt(curr) - currentHour) < Math.abs(parseInt(prev) - currentHour) ? curr : prev);
+        });
+
         packets.forEach((p) => {
-            const proto = p.protocol || 'TCP';
-            const hour = new Date().getHours().toString().padStart(2, '0');
-            const key = `${proto}-${hour}`;
+            const proto = (p.protocol || 'TCP').toUpperCase();
+            const key = `${proto}-${bucket}`;
             counts[key] = (counts[key] || 0) + 1;
         });
         setHeatData(counts);

@@ -5,8 +5,17 @@ import axios from 'axios';
 import { Packet, ThreatVerdict, FirewallRule, DeviceTrust, AnalystReport, SelfHealResult, EventLog } from './types';
 
 const API = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080',
     timeout: 10000,
+});
+
+// Add a request interceptor to include the JWT token
+API.interceptors.request.use((config) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
 });
 
 // ─── Detection ───

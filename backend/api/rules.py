@@ -17,8 +17,10 @@ class OverrideInput(BaseModel):
     approved: bool
 
 
+from utils.auth import get_current_user
+
 @router.get("")
-async def list_rules(db: Session = Depends(get_db)):
+async def list_rules(user: str = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get all active firewall rules."""
     return {"rules": get_active_rules(db)}
 

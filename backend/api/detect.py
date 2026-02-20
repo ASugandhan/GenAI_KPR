@@ -22,8 +22,14 @@ class PacketInput(BaseModel):
     packet_count: int = Field(..., example=847)
 
 
+from utils.auth import get_current_user
+
+from main import limiter
+from fastapi import Request
+
 @router.post("/detect")
-async def detect_threat(packet: PacketInput, db: Session = Depends(get_db)):
+@limiter.limit("100/minute")
+async def detect_threat(request: Request, packet: PacketInput, user: str = Depends(get_current_user), db: Session = Depends(get_db)):
     """Run a packet through the full detection pipeline."""
     packet_dict = packet.model_dump()
 
