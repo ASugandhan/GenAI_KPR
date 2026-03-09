@@ -26,7 +26,7 @@ async def list_rules(user: str = Depends(get_current_user), db: Session = Depend
 
 
 @router.post("/override")
-async def override(data: OverrideInput, db: Session = Depends(get_db)):
+async def override(data: OverrideInput, user: str = Depends(get_current_user), db: Session = Depends(get_db)):
     """Human override — approve or reject a rule."""
     result = override_rule(db, data.rule_id, data.approved)
     return result

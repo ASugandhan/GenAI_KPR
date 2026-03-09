@@ -8,7 +8,7 @@ from agents.base_agent import BaseAgent
 from core.trust_engine import get_or_create_device, apply_penalty, get_recommended_action, SEVERITY_PENALTY
 from core.rule_engine import create_rule
 from core.models import Event, SystemHealth
-from config import PROTECTED_IPS
+from config import PROTECTED_IPS, THREAT_PENALTY_COOLDOWN_SECONDS
 
 
 class TacticianAgent(BaseAgent):
@@ -52,13 +52,17 @@ class TacticianAgent(BaseAgent):
         self.log("processing_verdict", {"attack_type": attack_type, "severity": severity})
 
         # Step 1: Apply trust penalty
-        device = apply_penalty(db, src_ip, severity)
+        device, penalty_applied = apply_penalty(
+            db, src_ip, severity, cooldown_seconds=THREAT_PENALTY_COOLDOWN_SECONDS
+        )
         trust_score = device.trust_score
 
         # Step 1.5: Apply system health penalty
         health = self._get_or_init_health(db)
-        penalty = SEVERITY_PENALTY.get(severity, 3)
-        health.health_score = max(0.0, health.health_score - (penalty / 2.0)) # Global health drops less than individual trust
+        if penalty_applied:
+            penalty = SEVERITY_PENALTY.get(severity, 3)
+            # Global health drops less than individual trust and only once per cooldown window.
+            health.health_score = max(0.0, health.health_score - (penalty / 2.0))
         health.last_updated = datetime.utcnow()
         db.commit()
 

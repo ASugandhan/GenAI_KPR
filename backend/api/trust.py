@@ -7,12 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from core.database import get_db
 from core.trust_engine import get_all_scores, get_device_score
+from utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/trust", tags=["Trust"])
 
 
 @router.get("")
-async def all_trust_scores(db: Session = Depends(get_db)):
+async def all_trust_scores(user: str = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get all device trust scores."""
     scores = get_all_scores(db)
     return {
@@ -31,7 +32,7 @@ async def all_trust_scores(db: Session = Depends(get_db)):
 
 
 @router.get("/{device_id}")
-async def device_trust_score(device_id: str, db: Session = Depends(get_db)):
+async def device_trust_score(device_id: str, user: str = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get a single device's trust score."""
     score = get_device_score(db, device_id)
     if not score:

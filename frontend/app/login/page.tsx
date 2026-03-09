@@ -1,30 +1,53 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
-    const router = useRouter();
+    const [loading, setLoading] = useState(false);
 
     const handleLogin = async () => {
+        if (loading) return;
+        setError("");
+        setLoading(true);
         try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 8000);
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username, password }),
+                signal: controller.signal,
             });
+            clearTimeout(timeout);
 
             if (res.ok) {
-                const data = await res.json();
+                let data: any = null;
+                try {
+                    data = await res.json();
+                } catch {
+                    setError("Invalid login response from server");
+                    return;
+                }
+                if (!data?.access_token) {
+                    setError("Login response missing token");
+                    return;
+                }
                 localStorage.setItem("token", data.access_token);
-                router.push("/");
+                // Hard redirect so user never gets stuck on /login.
+                window.location.assign("/");
             } else {
-                setError("Invalid credentials");
+                setError(`Login failed (${res.status})`);
             }
-        } catch (err) {
-            setError("Failed to connect to authentication server");
+        } catch (err: any) {
+            if (err?.name === "AbortError") {
+                setError("Login timed out. Check backend on :8000");
+            } else {
+                setError("Failed to connect to authentication server");
+            }
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -51,9 +74,10 @@ export default function LoginPage() {
                 {error && <p className="text-red-400 text-sm mt-3 mb-3">{error}</p>}
                 <button
                     onClick={handleLogin}
+                    disabled={loading}
                     className="w-full bg-green-600 hover:bg-green-500 text-white rounded p-2 font-bold mt-6 transition-colors"
                 >
-                    LOGIN
+                    {loading ? "LOGGING IN..." : "LOGIN"}
                 </button>
                 <div className="mt-6 pt-6 border-t border-gray-800">
                     <p className="text-gray-500 text-xs text-center mb-1">Demo Credentials:</p>

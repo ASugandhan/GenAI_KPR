@@ -8,19 +8,20 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.models import SystemHealth
 from agents.selfheal_agent import selfheal
+from utils.auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["Self-Heal"])
 
 
 @router.post("/selfheal")
-async def trigger_selfheal(db: Session = Depends(get_db)):
+async def trigger_selfheal(user: str = Depends(get_current_user), db: Session = Depends(get_db)):
     """Trigger the Self-Healing Agent to analyze and harden."""
     result = await selfheal.process(db=db)
     return result
 
 
 @router.get("/health-score")
-async def health_score(db: Session = Depends(get_db)):
+async def health_score(user: str = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get current system health score."""
     health = db.query(SystemHealth).filter(SystemHealth.id == 1).first()
     if not health:

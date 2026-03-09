@@ -2,7 +2,7 @@
 ZeroTrust AI — Trust Engine
 Zero Trust scoring: 0–100, decay on threats, recovery over time.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from core.models import TrustScore
 import uuid
@@ -41,19 +41,26 @@ def get_or_create_device(db: Session, ip_address: str) -> TrustScore:
     return device
 
 
-def apply_penalty(db: Session, ip_address: str, severity: str) -> TrustScore:
+def apply_penalty(db: Session, ip_address: str, severity: str, cooldown_seconds: int = 0) -> tuple[TrustScore, bool]:
     """Apply trust penalty based on threat severity."""
     device = get_or_create_device(db, ip_address)
     penalty = SEVERITY_PENALTY.get(severity, 3)
+    now = datetime.utcnow()
 
-    device.trust_score = max(0.0, device.trust_score - penalty)
-    device.anomaly_count += 1
-    device.last_threat = datetime.utcnow()
-    device.last_updated = datetime.utcnow()
+    penalty_applied = True
+    if cooldown_seconds > 0 and device.last_threat:
+        if now - device.last_threat < timedelta(seconds=cooldown_seconds):
+            penalty_applied = False
+
+    if penalty_applied:
+        device.trust_score = max(0.0, device.trust_score - penalty)
+        device.anomaly_count += 1
+        device.last_threat = now
+    device.last_updated = now
 
     db.commit()
     db.refresh(device)
-    return device
+    return device, penalty_applied
 
 
 def recover_trust(db: Session, ip_address: str, minutes_clean: int = 1) -> TrustScore:

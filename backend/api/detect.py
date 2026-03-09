@@ -1,13 +1,15 @@
 """
-ZeroTrust AI — Detection API
-POST /api/detect — Run packet through Sentinel + Tactician pipeline.
+ZeroTrust AI - Detection API
+POST /api/detect - Submit packet into autonomous 4-agent pipeline.
+GET /api/incidents/{incident_id} - Fetch incident state.
+GET /api/incidents - Recent incident states.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
-from core.database import get_db
-from agents.sentinel_agent import sentinel
-from agents.tactician_agent import tactician
+
+from core.autonomous_runtime import runtime
+from utils.auth import get_current_user
+from utils.rate_limit import limiter
 
 router = APIRouter(prefix="/api", tags=["Detection"])
 
@@ -22,28 +24,30 @@ class PacketInput(BaseModel):
     packet_count: int = Field(..., example=847)
 
 
-from utils.auth import get_current_user
-
-from main import limiter
-from fastapi import Request
-
 @router.post("/detect")
 @limiter.limit("100/minute")
-async def detect_threat(request: Request, packet: PacketInput, user: str = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Run a packet through the full detection pipeline."""
+async def detect_threat(
+    request: Request,
+    packet: PacketInput,
+    user: str = Depends(get_current_user),
+):
+    """Submit packet to autonomous pipeline and wait for mitigation verdict."""
     packet_dict = packet.model_dump()
+    result = await runtime.submit_packet(packet_dict, wait_for_result=True, timeout_seconds=6.0)
+    return result
 
-    # Step 1: Sentinel detection
-    verdict = await sentinel.process(packet_dict)
 
-    # Step 2: Tactician response (only if threat)
-    response = {}
-    if verdict.get("is_threat"):
-        response = await tactician.process(verdict, db=db, packet=packet_dict)
+@router.get("/incidents/{incident_id}")
+async def get_incident(incident_id: str, user: str = Depends(get_current_user)):
+    incident = runtime.get_incident(incident_id)
+    if not incident:
+        return {"error": "Incident not found", "incident_id": incident_id}
+    return incident
 
-    return {
-        **verdict,
-        "rule_generated": response.get("rule_generated"),
-        "trust_score_after": response.get("trust_score_after"),
-        "action": response.get("action", "none"),
-    }
+
+@router.get("/incidents")
+async def list_incidents(
+    limit: int = Query(20, ge=1, le=100),
+    user: str = Depends(get_current_user),
+):
+    return {"incidents": runtime.list_recent_incidents(limit=limit)}

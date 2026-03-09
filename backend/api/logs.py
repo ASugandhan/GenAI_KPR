@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from core.database import get_db
 from core.models import Event
+from utils.auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["Logs"])
 
@@ -15,6 +16,7 @@ async def get_logs(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     severity: str = Query(None),
+    user: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get paginated threat event logs."""

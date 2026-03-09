@@ -6,10 +6,11 @@ import uuid
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from core.models import Rule
+from core.firewall_executor import apply_firewall_rule, remove_firewall_rule
 import sys, os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from config import PROTECTED_IPS
+from config import PROTECTED_IPS, AUTO_APPLY_RULES, RULE_COOLDOWN_SECONDS, MAX_ACTIVE_RULES
 
 
 # Action → TTL (Time to live for the rule)
@@ -19,6 +20,27 @@ ACTION_TTL = {
     "block_temp": timedelta(minutes=5),
     "block_perm": None,  # Permanent
 }
+
+
+def _extract_rule_params(iptables_cmd: str) -> tuple[str, int, str]:
+    """Parse src_ip/port/protocol from stored iptables command (best-effort)."""
+    src_ip = ""
+    port = 0
+    protocol = "tcp"
+    if not iptables_cmd:
+        return src_ip, port, protocol
+    parts = iptables_cmd.split()
+    for i, token in enumerate(parts):
+        if token == "-s" and i + 1 < len(parts):
+            src_ip = parts[i + 1]
+        elif token == "--dport" and i + 1 < len(parts):
+            try:
+                port = int(parts[i + 1])
+            except ValueError:
+                port = 0
+        elif token == "-p" and i + 1 < len(parts):
+            protocol = parts[i + 1]
+    return src_ip, port, protocol
 
 
 def generate_iptables_cmd(action: str, src_ip: str, port: int, protocol: str = "tcp") -> str:
@@ -48,6 +70,29 @@ def generate_rule_text(action: str, src_ip: str, port: int, attack_type: str) ->
     return texts.get(action, f"Unknown action for {src_ip}")
 
 
+def _find_recent_duplicate_rule(db: Session, src_ip: str, action: str):
+    """Return a recent active rule for same source and action, if present."""
+    if RULE_COOLDOWN_SECONDS <= 0:
+        return None
+    threshold = datetime.utcnow() - timedelta(seconds=RULE_COOLDOWN_SECONDS)
+    return (
+        db.query(Rule)
+        .filter(Rule.active == True)
+        .filter(Rule.action == action)
+        .filter(Rule.created_at >= threshold)
+        .filter(Rule.iptables_cmd.like(f"%-s {src_ip} %"))
+        .order_by(Rule.created_at.desc())
+        .first()
+    )
+
+
+def _threshold_reached(db: Session) -> bool:
+    if MAX_ACTIVE_RULES <= 0:
+        return False
+    active_count = db.query(Rule).filter(Rule.active == True).count()
+    return active_count >= MAX_ACTIVE_RULES
+
+
 def create_rule(
     db: Session,
     event_id: str,
@@ -68,6 +113,55 @@ def create_rule(
     ttl = ACTION_TTL.get(action)
     expires_at = (datetime.utcnow() + ttl) if ttl else None
 
+    if _threshold_reached(db):
+        declined = Rule(
+            id=str(uuid.uuid4()),
+            event_id=event_id,
+            action=action,
+            rule_text=f"[AUTO-DECLINED: threshold] {rule_text}",
+            iptables_cmd=iptables_cmd,
+            created_at=datetime.utcnow(),
+            expires_at=expires_at,
+            active=False,
+            human_approved=False,
+        )
+        db.add(declined)
+        db.commit()
+        db.refresh(declined)
+        return {
+            "id": declined.id,
+            "action": action,
+            "rule_text": declined.rule_text,
+            "iptables_cmd": iptables_cmd,
+            "expires_at": expires_at.isoformat() if expires_at else None,
+            "active": False,
+            "human_approved": False,
+            "execution": {
+                "auto_applied": False,
+                "applied_at": None,
+                "executor_os": None,
+                "executor_message": f"auto_declined_threshold_reached:{MAX_ACTIVE_RULES}",
+            },
+        }
+
+    duplicate = _find_recent_duplicate_rule(db, src_ip, action)
+    if duplicate:
+        return {
+            "id": duplicate.id,
+            "action": duplicate.action,
+            "rule_text": duplicate.rule_text,
+            "iptables_cmd": duplicate.iptables_cmd,
+            "expires_at": duplicate.expires_at.isoformat() if duplicate.expires_at else None,
+            "active": duplicate.active,
+            "human_approved": duplicate.human_approved,
+            "execution": {
+                "auto_applied": False,
+                "applied_at": None,
+                "executor_os": None,
+                "executor_message": "duplicate_rule_reused",
+            },
+        }
+
     rule = Rule(
         id=str(uuid.uuid4()),
         event_id=event_id,
@@ -83,13 +177,39 @@ def create_rule(
     db.commit()
     db.refresh(rule)
 
+    execution = {
+        "auto_applied": False,
+        "applied_at": None,
+        "executor_os": None,
+        "executor_message": "auto_apply_disabled",
+    }
+    if AUTO_APPLY_RULES and action in ("block_temp", "block_perm"):
+        execution = apply_firewall_rule(
+            rule_id=rule.id,
+            action=action,
+            src_ip=src_ip,
+            port=port,
+            protocol=protocol,
+            expires_at=expires_at,
+        )
+        if execution.get("auto_applied"):
+            rule.human_approved = True
+        else:
+            # Fail-safe: disable rule if OS-level enforcement fails.
+            rule.active = False
+            rule.human_approved = False
+        db.commit()
+        db.refresh(rule)
+
     return {
         "id": rule.id,
         "action": action,
         "rule_text": rule_text,
         "iptables_cmd": iptables_cmd,
         "expires_at": expires_at.isoformat() if expires_at else None,
-        "active": True,
+        "active": rule.active,
+        "human_approved": rule.human_approved,
+        "execution": execution,
     }
 
 
@@ -119,7 +239,43 @@ def override_rule(db: Session, rule_id: str, approved: bool) -> dict:
         return {"error": "Rule not found"}
 
     rule.human_approved = approved
+    if approved and _threshold_reached(db):
+        rule.human_approved = False
+        rule.active = False
+        db.commit()
+        db.refresh(rule)
+        return {
+            "id": rule.id,
+            "human_approved": rule.human_approved,
+            "active": rule.active,
+            "execution": {
+                "executor_message": f"manual_approve_denied_threshold_reached:{MAX_ACTIVE_RULES}"
+            },
+        }
+
+    src_ip, port, protocol = _extract_rule_params(rule.iptables_cmd or "")
+    execution = {"executor_message": "manual_override_only"}
+    if approved and not AUTO_APPLY_RULES and rule.action in ("block_temp", "block_perm"):
+        execution = apply_firewall_rule(
+            rule_id=rule.id,
+            action=rule.action,
+            src_ip=src_ip,
+            port=port,
+            protocol=protocol,
+            expires_at=rule.expires_at,
+        )
+        if not execution.get("auto_applied"):
+            rule.active = False
     if not approved:
+        if rule.action in ("block_temp", "block_perm"):
+            # Best-effort rollback from host firewall.
+            execution = remove_firewall_rule(
+                rule_id=rule.id,
+                action=rule.action,
+                src_ip=src_ip,
+                port=port,
+                protocol=protocol,
+            )
         rule.active = False
     db.commit()
     db.refresh(rule)
@@ -128,4 +284,5 @@ def override_rule(db: Session, rule_id: str, approved: bool) -> dict:
         "id": rule.id,
         "human_approved": rule.human_approved,
         "active": rule.active,
+        "execution": execution,
     }
