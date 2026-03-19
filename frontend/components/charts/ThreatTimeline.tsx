@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useSSE } from '@/lib/useSSE';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 export default function ThreatTimeline() {
     const { packets } = useSSE(`${API_URL}/api/traffic/stream`, 100);

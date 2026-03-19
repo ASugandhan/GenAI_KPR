@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSSE } from '@/lib/useSSE';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 const PROTOCOLS = ['TCP', 'UDP', 'HTTP', 'HTTPS', 'DNS', 'SSH', 'ICMP'];
 const HOURS = ['00', '04', '08', '12', '16', '20'];

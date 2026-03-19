@@ -2,6 +2,7 @@
 import { useState } from "react";
 
 export default function LoginPage() {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
@@ -14,7 +15,7 @@ export default function LoginPage() {
         try {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 8000);
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/login`, {
+            const res = await fetch(`${apiBase}/api/auth/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username, password }),
